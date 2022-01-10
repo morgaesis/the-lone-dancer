@@ -119,6 +119,11 @@ class BotDispatcher(discord.Client):
         super().__init__(*args, **kwargs)
         self.clients = {}  # guild -> discord.Client instance
 
+    def _get_guild_bot(self, guild):
+        if guild not in self.clients:
+            self.clients[guild] = MusicBot(guild, self.loop, self.user)
+        return self.clients[guild]
+
     async def on_ready(self):
         """
         Login and loading handling
@@ -129,9 +134,22 @@ class BotDispatcher(discord.Client):
         """
         Login and loading handling
         """
-        if message.guild not in self.clients:
-            self.clients[message.guild] = MusicBot(message.guild, self.loop, self.user)
-        await self.clients[message.guild].handle_message(message)
+        guild = self._get_guild(message.channel.guild)
+        await self.clients[guild].handle_message(message)
+
+    async def on_voice_state_update(self, member, before, after):
+        """
+        Leave if alone for a long time
+        """
+        if after.channel:
+            # User entering voice channel or changing mute/deafen
+            return
+
+        # User left channel
+        assert not after.channel and before.channel
+
+        guild = self._get_guild(before.channel.guild)
+        await self.clients[guild].voice_disconnect(member, before.channel)
 
     async def on_error(
         self, event_name, *args, **kwargs
@@ -179,6 +197,7 @@ class MusicBot:
     REACTION_EMOJI = "👍"
     DOCS_URL = "github.com/michael-je/the-lone-dancer"
     DISCONNECT_TIMER_SECONDS = 600
+    ALONE_SLEEP_TIMER = 300
     TEXTWIDTH = 60
     SYNTAX_LANGUAGE = "arm"
     N_PLAYLIST_SHOW = 10
@@ -189,6 +208,9 @@ class MusicBot:
         self.guild = guild
         self.loop = loop
         self.dispatcher_user = dispatcher_user
+
+        self.is_alone_in_voice_channel = False
+        self.alone_sleep_time_start = 0
 
         self.handlers = {}
         self.help_messages = {}
@@ -449,6 +471,32 @@ class MusicBot:
         # Execute the command.
         await handler(message, command_content)
 
+    async def voice_connect(self, _member, channel):
+        """
+        Handle member leaving (voice) channel
+        """
+        if not self.voice_client:
+            return
+        if self.voice_client.channel == channel:
+            self.is_alone_in_voice_channel = False
+
+    async def voice_disconnect(self, _member, channel):
+        """
+        Handle member leaving (voice) channel
+        """
+        if not self.voice_client:
+            return
+        if self.voice_client.channel == channel:
+            self.is_alone_in_voice_channel = True
+            self.alone_sleep_time_start = time.time()
+            await asyncio.sleep(MusicBot.ALONE_SLEEP_TIMER)
+            if (
+                self.is_alone_in_voice_channel
+                and abs(time.time() - self.alone_sleep_time_start)
+                >= MusicBot.ALONE_SLEEP_TIMER
+            ):
+                self._disconnect()
+
     def get_spotify_client(self):
         """Get Spotify client"""
         try:
@@ -590,9 +638,7 @@ class MusicBot:
             return
         logging.info("Disconnecting from voice chat due to inactivity")
 
-        self._stop()
-        await self.voice_client.disconnect()
-        self.voice_client = None
+        self._disconnect()
 
     async def notify_if_voice_client_is_missing(self, message):
         """
@@ -983,12 +1029,16 @@ class MusicBot:
         """
         await message.channel.send(f"https://youtu.be/{self.current_media.videoid}")
 
-    async def disconnect(self, message, _command_content):
-        """Disconnects the bot from the voice channel its connected to, if any."""
+    async def _disconnect(self):
+        """Disconnect from current voice channel"""
         if self.voice_client:
             self._stop()
             await self.voice_client.disconnect()
             self.voice_client = None
+
+    async def disconnect(self, message, _command_content):
+        """Disconnects the bot from the voice channel its connected to, if any."""
+        self._disconnect()
         await message.add_reaction(MusicBot.REACTION_EMOJI)
 
     async def hello(self, message, _command_content):

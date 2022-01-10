@@ -354,6 +354,15 @@ class MusicBotTest(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+    async def test_disconnect(self):
+        old_timer = bot.MusicBot.ALONE_SLEEP_TIMER
+        bot.MusicBot.ALONE_SLEEP_TIMER = 0.1
+
+        voice_channel = create_mock_voice_channel()
+        self.music_bot_.voice_connect(None, voice_channel)
+
+        bot.MusicBot.ALONE_SLEEP_TIMER = old_timer
+
 
 if __name__ == "__main__":
     unittest.main()
