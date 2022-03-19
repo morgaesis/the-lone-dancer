@@ -1,15 +1,15 @@
 [Unit]
 Description=The Lone Dancer
 After=basic.target
+After=the-lone-dancer-automatic.service
+EnvironmentFile=/etc/the-lone-dancer/config
 
 [Service]
 Type=simple
-#Restart=always
-#RemainAfterExit=yes
+Restart=always
 User=the-lone-dancer
-ExecStart=/usr/bin/podman start --attach the-lone-dancer
-#ExecReload=/usr/bin/podman restart the-lone-dancer
-ExecStop=/usr/bin/podman stop the-lone-dancer
+ExecStart=/usr/bin/the-lone-dancer --verbose
 
 [Install]
 WantedBy=multi-user.target
+WantedBy=the-lone-dancer-update.service

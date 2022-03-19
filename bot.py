@@ -1,3 +1,4 @@
+#!/bin/env python3
 """
 Serves a bot on Discord for playing music in voice chat, as well as some fun additions.
 """

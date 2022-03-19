@@ -1,8 +1,10 @@
 [Unit]
 Description=The Lone Dancer updater
 After=basic.target
+Conflicts=the-lone-dancer.service
+EnvironmentFile=/etc/the-lone-dancer/config
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/the-lone-dancer-update.sh
+ExecStart=/usr/local/bin/the-lone-dancer-update
